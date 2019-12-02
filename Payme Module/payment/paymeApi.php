@@ -1,4 +1,5 @@
 <?php
+//Evolution version
 
 class paymeApi {
 
@@ -44,7 +45,6 @@ class paymeApi {
 
 			} else {
 
-				// Request ID
 				if (!empty($this->inputArray['id']) ) {
 
 					$this->request_id = filter_var($this->inputArray['id'], FILTER_SANITIZE_NUMBER_INT);
@@ -126,7 +126,7 @@ class paymeApi {
 			}
 		}
 	}
-    // FIX state=1 and
+
 	public function SaveOrder($amount, $cmsOrderId,$paycomTime,$paycomTimeDatetime,$paycomTransactionId ) {
 
 		$sql= "SELECT * FROM payme_transactions WHERE cms_order_id='".$cmsOrderId."' and amount=".$amount." and state=1";
@@ -435,17 +435,17 @@ class paymeApi {
 			while ($row = $dbResult->fetch(PDO::FETCH_ASSOC)) {
 				array_push($transactions,array(
 
-				"id"		   => $row["paycom_transaction_id"],
-				"time"		   => $row['paycom_time']  ,
-				"amount"	   => $row["amount"],
-				"account"	   => array("cms_order_id" => $row["cms_order_id"]),
-				"create_time"  => (is_null($row['create_time']) ? null: $this->datetime2timestamp( $row['create_time']) ) ,
-				"perform_time" => (is_null($row['perform_time'])? null: $this->datetime2timestamp( $row['perform_time'])) ,
-				"cancel_time"  => (is_null($row['cancel_time']) ? null: $this->datetime2timestamp( $row['cancel_time']) ) ,
-				"transaction"  => $row["cms_order_id"],
-				"state"		   => (int) $row['state'],
-				"reason"	   => (is_null($row['reason'])?null:(int) $row['reason']) ,
-				"receivers"	=> null
+				"id"		  => $row["paycom_transaction_id"],
+				"time"		  => $row['paycom_time']  ,
+				"amount"	  => $row["amount"],
+				"account"	  => array("cms_order_id" => $row["cms_order_id"]),
+				"create_time" => (is_null($row['create_time']) ? null: $this->datetime2timestamp( $row['create_time']) ) ,
+				"perform_time"=> (is_null($row['perform_time'])? null: $this->datetime2timestamp( $row['perform_time'])) ,
+				"cancel_time" => (is_null($row['cancel_time']) ? null: $this->datetime2timestamp( $row['cancel_time']) ) ,
+				"transaction" => $row["cms_order_id"],
+				"state"		  => (int) $row['state'],
+				"reason"	  => (is_null($row['reason'])?null:(int) $row['reason']) ,
+				"receivers"   => null
 			)) ;
 			}
 		} 
