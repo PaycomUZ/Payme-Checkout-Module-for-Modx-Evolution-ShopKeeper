@@ -35,13 +35,13 @@ Payme Checkout Module for Modx (Evolution )+ShopKeeper
 
 5. Добавьте способ оплаты в шаблон оформления заказа.
    Пример:
- 
+ <pre>
    <select name="payment" >
       <option value="payme">Payme</option>
       <option value="При получении">При получении</option> 
       <option value="other">Другая платежная система</option>
    </select> 
-
+</pre>
 6.  Изменить конфигурацию Payme (файл /assets/snippets/payme/paymeConfig.php):
 	"Элементы" -> "Управление элементами" -> "Сниппеты", нажать "Payme", перейти на вкладку "Свойства"
     Открыть файл SnippetParameters.js, cкопировать содержимое и вставить. Нажать "Обновить параметры". 
