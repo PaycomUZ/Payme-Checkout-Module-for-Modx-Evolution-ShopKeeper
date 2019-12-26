@@ -1,0 +1,39 @@
+<?php
+
+if ($_SESSION['shk_payment_method'] != 'payme') {
+
+	$modx->sendRedirect(SUCCESS_PAGE, 0, 'REDIRECT_HEADER');
+}
+
+$dbprefix = $modx->db->config['table_prefix'];
+$mod_table = $dbprefix."manager_shopkeeper";
+
+$order_id = $_SESSION['shk_order_id'];
+$amount = $modx->db->getValue($modx->db->select("price", $mod_table, "id = $order_id", "", ""));
+$amount = number_format($amount, 2, '.', '');
+$amount = $amount*100;
+
+$properties = '';
+$txt = '';
+$res = $modx->db->select("properties", $modx->getFullTableName('site_snippets'),"upper(name)='PAYME'");  
+ 
+if($modx->db->getRecordCount($res)) {  
+ 
+	$properties = $modx->db->getValue($res);	
+	$txt = $modx->parseProperties($properties);
+			
+} else { break; }  
+ 
+	 if ($txt['paymeTestMode']==1) $paymeUrl=$txt['paymeCheckoutUrlForTest'];
+else if ($txt['paymeTestMode']==0) $paymeUrl=$txt['paymeCheckoutUrl'];
+
+$paymeUrl=$paymeUrl.'/'.base64_encode(
+	'ac.order_id='.$order_id.
+	';a=' .$amount.
+	';cr='.'860'.
+	';m=' .$txt['paymeMerchantId'].
+	';ct='.$txt['paymeAfterPayment'].
+	';c=' .$txt['paymeReturnUrl']
+); 
+$modx->sendRedirect($paymeUrl,array('type' => 'REDIRECT_META'));
+break;

@@ -1,5 +1,4 @@
 <?php
-//Evolution version
 
 class paymeApi {
 
@@ -11,7 +10,7 @@ class paymeApi {
 	private $inputArray;
 	private $lastTransaction;
 	private $statement;
-	private $paymentMethod;
+	private $snpetProp;
 	private $myModx;
 
 	public function construct() { }
@@ -20,10 +19,22 @@ class paymeApi {
 
 		$this->myModx=$i_myModx;
 	}
+	
+	public function getSnpetProp(){ 
+	
+		$res = $this->myModx->db->select("properties", $this->myModx->getFullTableName('site_snippets'),"upper(name)='PAYME'");  
+		 
+		if($this->myModx->db->getRecordCount($res)) {  
+		 
+			$properties = $this->myModx->db->getValue($res);	
+			$this->snpetProp = $this->myModx->parseProperties($properties);
+					
+		} else break; 
+	}
  
 	public function parseRequest() {
 		
-	//file_put_contents( $_SERVER['DOCUMENT_ROOT']."/assets/components/payme/payme.log", ' Begin  parseRequest'.PHP_EOL, FILE_APPEND);
+		//file_put_contents( $_SERVER['DOCUMENT_ROOT']."/assets/snippets/payme/payme.log", ' Begin  parseRequest'.PHP_EOL, FILE_APPEND);
 
 		if ( (!isset($this->inputArray)) || empty($this->inputArray) ) {
 
@@ -45,22 +56,12 @@ class paymeApi {
 
 			} else {
 
+				// Request ID
 				if (!empty($this->inputArray['id']) ) {
 
 					$this->request_id = filter_var($this->inputArray['id'], FILTER_SANITIZE_NUMBER_INT);
 				}
-	 
-				$sql= "SELECT * FROM " . $this->myModx->getFullTableName("site_snippets")." WHERE ".$this->myModx->getFullTableName("site_snippets").".name='Payme' ";
-				$dbResult= $this->myModx->query($sql);
- 
-				if ($dbResult) { 
-					
-					if ($dbResult->rowCount()==1) {
-						
-						$row = $dbResult->fetch(PDO::FETCH_ASSOC);
-						$this->paymentMethod=unserialize($row['properties']);
-					}
-				}
+				
 					 if ($_SERVER['REQUEST_METHOD']!='POST') $this->setErrorCod(-32300);
 				else if(! isset($_SERVER['PHP_AUTH_USER']))  $this->setErrorCod(-32504,"логин пустой");
 				else if(! isset($_SERVER['PHP_AUTH_PW']))	 $this->setErrorCod(-32504,"пароль пустой");
@@ -68,15 +69,11 @@ class paymeApi {
 		}
 
 		if ($this->result) {
+			
+			 $this->getSnpetProp();
 
-			if ($this->paymentMethod['paymeTestMode']['value']=='yes'){
-
-				$merchantKey=html_entity_decode($this->paymentMethod['paymePasswordForTest']['value']);
-
-			} else if ($this->paymentMethod['paymeTestMode']['value']=='no'){
-
-				$merchantKey=html_entity_decode($this->paymentMethod['paymePassword']['value']);
-			}
+			     if ($this->snpetProp['paymeTestMode']==1) $merchantKey=html_entity_decode($this->snpetProp['paymePasswordForTest']);
+			else if ($this->snpetProp['paymeTestMode']==0) $merchantKey=html_entity_decode($this->snpetProp['paymePassword']); 
 
 			if( $merchantKey != html_entity_decode($_SERVER['PHP_AUTH_PW']) ) {
 
@@ -98,61 +95,71 @@ class paymeApi {
 
 		return $this->GenerateResponse();
 	}
-	
+
 	public function getTransactionByOrderId($order_id) {
 
 		$sql= "SELECT * FROM payme_transactions WHERE cms_order_id='".$order_id."' order by transaction_id ";
-		$dbResult= $this->myModx->query($sql);
+		$dbResult= $this->myModx->db->query($sql);
+	
+		while ($row = $this->myModx->db->getRow($dbResult)) {
 
-		if ($dbResult) {
-
-			while ($row = $dbResult->fetch(PDO::FETCH_ASSOC)) {
-
-				$this->lastTransaction=$row;
-			}
-		}
+			$this->lastTransaction=$row;
+		} 
 	}
 	
 	public function getTransactionDateByPaymeTrId($t_id) {
 
 		$sql= "SELECT * FROM payme_transactions WHERE paycom_transaction_id='".$t_id."' order by transaction_id ";
-		$dbResult= $this->myModx->query($sql);
+		$dbResult= $this->myModx->db->query($sql); 
 
-		if ($dbResult) {
+		while ($row = $this->myModx->db->getRow($dbResult)) {
 
-			while ($row = $dbResult->fetch(PDO::FETCH_ASSOC)) {
-
-				$this->lastTransaction=$row;
-			}
+			$this->lastTransaction=$row;
 		}
 	}
-
+    // FIX state=1 and
 	public function SaveOrder($amount, $cmsOrderId,$paycomTime,$paycomTimeDatetime,$paycomTransactionId ) {
 
-		$sql= "SELECT * FROM payme_transactions WHERE cms_order_id='".$cmsOrderId."' and amount=".$amount." and state=1";
-		$dbResult= $this->myModx->query($sql);
+		$res = $this->myModx->db->select("id", 'payme_transactions',  "cms_order_id='".$cmsOrderId."' and amount=".$amount." and state=1"  );  
 
-		if ($dbResult) {
+		if($this->myModx->db->getRecordCount($res)) { 
 
-			if ($dbResult->rowCount()==0) {
-
-			$sql = "INSERT INTO payme_transactions (create_time, amount,state,cms_order_id,paycom_time,paycom_time_datetime,paycom_transaction_id)
-			VALUES ('".date('Y-m-d H:i:s')."',".$amount.",1,'".(is_null( $cmsOrderId ) ? 0:$cmsOrderId)."','".$paycomTime."','".$paycomTimeDatetime."','".$paycomTransactionId."')";
-
-			$stmt = $this->myModx->prepare($sql);
-			$stmt->execute();
-
-			}
+		} else {
+			  
+			$fields = array('create_time'  => date('Y-m-d H:i:s'),  
+							'amount' => $amount,  
+							'state'  => 1,  
+							'cms_order_id' =>(is_null( $cmsOrderId ) ? 0:$cmsOrderId), 
+							'paycom_time' => $paycomTime, 
+							'paycom_time_datetime' => $paycomTimeDatetime, 
+							'paycom_transaction_id' => $paycomTransactionId 
+							);
+				
+			$this->myModx->db->insert( $fields, 'payme_transactions'); 
+				
 		}
+	}
+	
+	public function payme_getOrder($order_id) {
+		
+		$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper"; 
+		
+		$order = $this->myModx->db->getRow(
+									$this->myModx->db->select(
+									"id, short_txt, content, allowed, addit, price, currency, DATE_FORMAT(date,'%d.%m.%Y %k:%i') AS date, status, email, phone, payment, tracking_num,  userid", 
+									$mod_table, 
+									"id = $order_id", "", "")
+									);
+		return $order;							
 	}
 
 	public function payme_CheckPerformTransaction() {
-		
+
 		// Поиск транзакции по order_id
 		$this->getTransactionByOrderId($this->inputArray['params']['account']['order_id']);
 		
 		// Поиск заказа по order_id
-		$order = $this->myModx->getObject('shk_order', $this->inputArray['params']['account']['order_id'] );
+		$order = $this->payme_getOrder($this->inputArray['params']['account']['order_id'] );
 
 		// Заказ не найден
 		if (! $order ) {
@@ -166,12 +173,12 @@ class paymeApi {
 			if (! $this->lastTransaction ) {
 
 				// Проверка состояния заказа
-				if ($order->get('status')!=1 ) {
+				if ($order['status']!=1 ) {
 
 					$this->setErrorCod(-31052, 'order_id');
 
 				// Сверка суммы заказа
-				} else  if ( abs( (round($order->get('price') * 100)) - (int)$this->inputArray['params']['amount'])>=0.01) {
+				} else  if ( abs( (round($order['price'] * 100)) - (int)$this->inputArray['params']['amount'])>=0.01) {
 
 					$this->setErrorCod(-31001, 'order_id'); 
 
@@ -188,23 +195,23 @@ class paymeApi {
 			}
 		}
 	}
- 
+
 	public function payme_CreateTransaction() {
 		
 		$this->getTransactionDateByPaymeTrId($this->inputArray['params']['id']);
 		
 		if ($this->lastTransaction) {
-			$order = $this->myModx->getObject('shk_order', $this->lastTransaction['cms_order_id'] );
+			$order = $this->payme_getOrder($this->lastTransaction['cms_order_id'] );
 		}
 
 		// Существует транзакция
 		if ($this->lastTransaction) {
-
+			
 			$paycom_time_integer=$this->datetime2timestamp($this->lastTransaction['create_time'])*1000;
 			$paycom_time_integer=$paycom_time_integer+43200000;
 
 			// Проверка состояния заказа
-			if ($order->get('status')!=1 ){ //order status 2 A
+			if ($order['status']!=1 ){ //order status 2 A
 
 				$this->setErrorCod(-31052, 'order_id');
  
@@ -216,14 +223,14 @@ class paymeApi {
 			// Проверка времени создания транзакции
 			} else if ($paycom_time_integer <= $this->timestamp2milliseconds(time())){
 
-				// Отменит reason = 4
-				$sql = "UPDATE payme_transactions SET cancel_time='".date('Y-m-d H:i:s')."', reason=4, state=-1 WHERE paycom_transaction_id = '".$this->inputArray['params']['id']."'";
-				$stmt = $this->myModx->prepare($sql);
-				$stmt->execute();
+				// Отменит reason = 4 
+				$fields = array('cancel_time' => date('Y-m-d H:i:s'), 'reason' => 4, 'state'  => -1 );  
+				$result = $this->myModx->db->update( $fields, 'payme_transactions', "paycom_transaction_id = '".$this->inputArray['params']['id']."'" );   
 				
-				$order->set('status', 5);
-                $order->save();
-
+				$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper";
+				$update_arr = array( 'status' => 5 );
+                $change_status = $this->myModx->db->update($update_arr, $mod_table, "id =".$order['id']);
+                $this->myModx->invokeEvent('OnSHKChangeStatus',array('order_id'=>$order['id'],'status'=>5)); 
 				$this->responceType=2;
  
 			// Всё OK
@@ -236,7 +243,7 @@ class paymeApi {
 		} else {
 			
 			$this->getTransactionByOrderId($this->inputArray['params']['account']['order_id']);
-			$order = $this->myModx->getObject('shk_order', $this->inputArray['params']['account']['order_id'] ); 
+			$order = $this->payme_getOrder($this->inputArray['params']['account']['order_id']); 
  
 			// Заказ не найден
 			if (! $order ) {
@@ -246,24 +253,24 @@ class paymeApi {
 			// Заказ найден
 			} else {
 
-				// Транзакция статусс
+				// Транзакция не найден
 				if (! $this->lastTransaction ) {
  
 				// Проверка состояния заказа 
-				if ($order->get('status')!=1 )  { //order status 1 Q
+				if ($order['status']!=1 )  { //order status 1 Q
 
 					$this->setErrorCod(-31052, 'order_id');
 
 				// Сверка суммы заказа 	
-				} else  if ( abs( (round($order->get('price') * 100)) - (int)$this->inputArray['params']['amount'])>=0.01) {
+				} else  if ( abs( (round($order['price'] * 100)) - (int)$this->inputArray['params']['amount'])>=0.01) {
 
 					$this->setErrorCod(-31001, 'order_id');
 
 				// Запись транзакцию state=1
 				} else {
-
+					
 					$this->SaveOrder(
-									($order->get('price')*100), 
+									($order['price']*100), 
 									$this->inputArray['params']['account']['order_id'],
 									$this->inputArray['params']['time'],
 									$this->timestamp2datetime($this->inputArray['params']['time'] ),
@@ -283,7 +290,7 @@ class paymeApi {
 	}
 
 	public function payme_CheckTransaction() {
- 
+
 		// Поиск транзакции по id
 		$this->getTransactionDateByPaymeTrId($this->inputArray['params']['id']);
 
@@ -308,7 +315,7 @@ class paymeApi {
 		if ($this->lastTransaction) {
 
 			// Поиск заказа по order_id
-			$order = $this->myModx->getObject('shk_order', $this->lastTransaction['cms_order_id'] );
+			$order = $this->payme_getOrder($this->lastTransaction['cms_order_id']);
   
 			// Проверка состояние транзакцие
 			if ($this->lastTransaction['state'] ==1){
@@ -320,20 +327,24 @@ class paymeApi {
 				if ($paycom_time_integer <= $this->timestamp2milliseconds(time())){
 
 					// Отменит reason = 4
-					$sql = "UPDATE payme_transactions SET cancel_time='".date('Y-m-d H:i:s')."', reason=4, state=-1 WHERE paycom_transaction_id = '".$this->inputArray['params']['id']."'";
-					$stmt = $this->myModx->prepare($sql);
-					$stmt->execute();
-					$order->set('status', 5);
-					$order->save();
+					$fields = array('cancel_time' => date('Y-m-d H:i:s'), 'reason' => 4, 'state'  => -1 );  
+					$result = $this->myModx->db->update( $fields, 'payme_transactions', "paycom_transaction_id = '".$this->inputArray['params']['id']."'" );   
+					
+					$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper";
+					$update_arr = array( 'status' => 5 );
+					$change_status = $this->myModx->db->update($update_arr, $mod_table, "id =".$order['id']);
+					$this->myModx->invokeEvent('OnSHKChangeStatus',array('order_id'=>$order['id'],'status'=>5));
 
 				// Всё Ok
 				} else {
 					// Оплата
-					$sql = "UPDATE payme_transactions SET perform_time='".date('Y-m-d H:i:s')."', state=2 WHERE paycom_transaction_id = '".$this->inputArray['params']['id']."'";
-					$stmt = $this->myModx->prepare($sql);
-					$stmt->execute();
-					$order->set('status', 2);
-					$order->save();
+					$fields = array('perform_time' => date('Y-m-d H:i:s'), 'state'  => 2 );  
+					$result = $this->myModx->db->update( $fields, 'payme_transactions', "paycom_transaction_id = '".$this->inputArray['params']['id']."'" );   
+					
+					$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper";
+					$update_arr = array( 'status' => 2 );
+					$change_status = $this->myModx->db->update($update_arr, $mod_table, "id =".$order['id']);
+					$this->myModx->invokeEvent('OnSHKChangeStatus',array('order_id'=>$order['id'],'status'=>2));
 				}
 
 				$this->responceType=2;
@@ -369,28 +380,32 @@ class paymeApi {
 		if ($this->lastTransaction) {
 
 			// Поиск заказа по order_id
-			$order = $this->myModx->getObject('shk_order', $this->lastTransaction['cms_order_id'] );
+			$order = $this->payme_getOrder($this->lastTransaction['cms_order_id']);
 			$reasonCencel=filter_var($this->inputArray['params']['reason'], FILTER_SANITIZE_NUMBER_INT);
 
 			// Проверка состояние транзакцие
 			if ($this->lastTransaction['state'] == 1){ //Transaction status W
 
 				// Отменит state = -1
-				$sql = "UPDATE payme_transactions SET cancel_time='".date('Y-m-d H:i:s')."', reason=".$reasonCencel.", state=-1 WHERE paycom_transaction_id = '".$this->inputArray['params']['id']."'";
-				$stmt = $this->myModx->prepare($sql);
-				$stmt->execute();
-				$order->set('status', 5);
-				$order->save();
+				$fields = array('cancel_time' => date('Y-m-d H:i:s'), 'reason' => $reasonCencel, 'state'  => -1 );  
+				$result = $this->myModx->db->update( $fields, 'payme_transactions', "paycom_transaction_id = '".$this->inputArray['params']['id']."'" );   
+				
+				$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper";
+				$update_arr = array( 'status' => 5 );
+				$change_status = $this->myModx->db->update($update_arr, $mod_table, "id =".$order['id']);
+				$this->myModx->invokeEvent('OnSHKChangeStatus',array('order_id'=>$order['id'],'status'=>5));
 
 			// Cостояние 2
 			} else if ($this->lastTransaction['state'] == 2){ //Transaction status
 
 				// Отменит state = -2
-				$sql = "UPDATE payme_transactions SET cancel_time='".date('Y-m-d H:i:s')."', reason=".$reasonCencel.", state=-2 WHERE paycom_transaction_id = '".$this->inputArray['params']['id']."'";
-				$stmt = $this->myModx->prepare($sql);
-				$stmt->execute();
-				$order->set('status', 5);
-				$order->save();
+				$fields = array('cancel_time' => date('Y-m-d H:i:s'), 'reason' => $reasonCencel, 'state'  => -2 );  
+				$result = $this->myModx->db->update( $fields, 'payme_transactions', "paycom_transaction_id = '".$this->inputArray['params']['id']."'" );   
+				
+				$mod_table = $this->myModx->db->config['table_prefix']."manager_shopkeeper";
+				$update_arr = array( 'status' => 5 );
+				$change_status = $this->myModx->db->update($update_arr, $mod_table, "id =".$order['id']);
+				$this->myModx->invokeEvent('OnSHKChangeStatus',array('order_id'=>$order['id'],'status'=>5));
 
 			// Cостояние
 			} else {
@@ -409,53 +424,63 @@ class paymeApi {
 	}
 
 	public function payme_ChangePassword() {
+ 
+		$propertiesString='';
+		$res = $this->myModx->db->select("properties", $this->myModx->getFullTableName('site_snippets'),"upper(name)='PAYME'");  
+		 
+		if($this->myModx->db->getRecordCount($res)) {  
+		 
+			$propertiesString = $this->myModx->db->getValue($res);
+					
+		} else break;
 		
-		$this->paymentMethod['paymePassword']['value']=$this->inputArray['params']['password'];
+		$propertiesJson = json_decode($propertiesString);
 		
-		$sql = "UPDATE ".$this->myModx->getFullTableName("site_snippets")." SET properties='".serialize($this->paymentMethod)."' WHERE name='Payme' ";
-		$stmt = $this->myModx->prepare($sql);
-		$stmt->execute();
-
+		    if ($propertiesJson->paymeTestMode[0]->value==1) 
+			$propertiesJson->paymePasswordForTest[0]->value=$this->inputArray['params']['password'];
+		else if ($propertiesJson->paymeTestMode[0]->value==0) 
+			$propertiesJson->paymePassword[0]->value=$this->inputArray['params']['password'];
+		
+		$propertiesString = json_encode($propertiesJson,JSON_UNESCAPED_UNICODE);
+		$fields = array('properties' => $propertiesString);  	
+		$result = $this->myModx->db->update( $fields, $this->myModx->getFullTableName('site_snippets'), "upper(name)='PAYME'"); 
 		$this->responceType=3;
 	}
 
 	public function payme_GetStatement() {
 		
-		$sql = "SELECT * FROM payme_transactions as t WHERE 
-						       t.paycom_time_datetime >= '".$this->timestamp2datetime($this->inputArray['params']['from']).
-						"' and  t.paycom_time_datetime <= '".$this->timestamp2datetime($this->inputArray['params']['to'])."'" ;
-				
-		$dbResult= $this->myModx->query($sql);
-		
 		$responseArray = array();
 		$transactions  = array();
- 
-		if ($dbResult) { 
-					
-			while ($row = $dbResult->fetch(PDO::FETCH_ASSOC)) {
-				array_push($transactions,array(
+		
+		$sql = "SELECT * FROM payme_transactions as t WHERE 
+						       t.paycom_time_datetime >= '".$this->timestamp2datetime($this->inputArray['params']['from']).
+					   "' and  t.paycom_time_datetime <= '".$this->timestamp2datetime($this->inputArray['params']['to'])."'" ;
+		
+		$dbResult= $this->myModx->db->query($sql); 
 
-				"id"		  => $row["paycom_transaction_id"],
-				"time"		  => $row['paycom_time']  ,
-				"amount"	  => $row["amount"],
-				"account"	  => array("cms_order_id" => $row["cms_order_id"]),
-				"create_time" => (is_null($row['create_time']) ? null: $this->datetime2timestamp( $row['create_time']) ) ,
-				"perform_time"=> (is_null($row['perform_time'])? null: $this->datetime2timestamp( $row['perform_time'])) ,
-				"cancel_time" => (is_null($row['cancel_time']) ? null: $this->datetime2timestamp( $row['cancel_time']) ) ,
-				"transaction" => $row["cms_order_id"],
-				"state"		  => (int) $row['state'],
-				"reason"	  => (is_null($row['reason'])?null:(int) $row['reason']) ,
-				"receivers"   => null
+		while ($row = $this->myModx->db->getRow($dbResult)) {
+
+			array_push($transactions,array(
+
+				"id"		   => $row["paycom_transaction_id"],
+				"time"		   => $row['paycom_time']  ,
+				"amount"	   => $row["amount"],
+				"account"	   => array("cms_order_id" => $row["cms_order_id"]),
+				"create_time"  => (is_null($row['create_time']) ? null: $this->datetime2timestamp( $row['create_time']) ) ,
+				"perform_time" => (is_null($row['perform_time'])? null: $this->datetime2timestamp( $row['perform_time'])) ,
+				"cancel_time"  => (is_null($row['cancel_time']) ? null: $this->datetime2timestamp( $row['cancel_time']) ) ,
+				"transaction"  => $row["cms_order_id"],
+				"state"		   => (int) $row['state'],
+				"reason"	   => (is_null($row['reason'])?null:(int) $row['reason']) ,
+				"receivers"	=> null
 			)) ;
-			}
-		} 
-
+		}
 		$responseArray['result'] = array( "transactions"=> $transactions );
 
 		$this->responceType=4;
-		$this->statement=$responseArray;
+		$this->statement=$responseArray; 
 	}
-
+ 
 	public function GenerateResponse() {
 
 		if ($this->errorCod==0) {

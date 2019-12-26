@@ -15,6 +15,6 @@ CREATE TABLE IF NOT EXISTS `payme_transactions` (
 			`is_flag_test` enum('Y','N') COLLATE utf8_unicode_ci NOT NULL,
 			PRIMARY KEY (`transaction_id`),
 			UNIQUE KEY `paycom_transaction_id` (`paycom_transaction_id`),
-			UNIQUE KEY `order_id` (`order_id`,`paycom_transaction_id`),
+			UNIQUE KEY `cms_order_id` (`cms_order_id`,`paycom_transaction_id`),
 			KEY `state` (`state`)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci AUTO_INCREMENT=2;
